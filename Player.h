@@ -157,8 +157,8 @@ public:
         yaw += (targetYaw - yaw) * 8.0f * dt;
     }
 
-    void fire(std::vector<Bullet>& bullets, float targetX = 0.0f, float targetY = 0.0f, float targetZ = -100.0f) {
-        if (!canFire()) return;
+    bool fire(std::vector<Bullet>& bullets, float targetX = 0.0f, float targetY = 0.0f, float targetZ = -100.0f) {
+        if (!canFire()) return false;
         fireCooldown = fireRate;
 
         // Left cannon pos
@@ -193,6 +193,7 @@ public:
             bullets.push_back(Bullet(leftX - 0.3f, leftY, leftZ, ldx - 2.0f, ldy, ldz, false, 25, 1.0f, 0.85f, 0.1f));
             bullets.push_back(Bullet(rightX + 0.3f, rightY, rightZ, rdx + 2.0f, rdy, rdz, false, 25, 1.0f, 0.85f, 0.1f));
         }
+        return true;
     }
 
     void takeDamage(int dmg, ParticleSystem& particles) {

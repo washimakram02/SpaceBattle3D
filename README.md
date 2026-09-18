@@ -57,8 +57,22 @@ In **3D Space Defender**, the player pilots an advanced starfighter through deep
   - Dreadnought Boss Health Bar on top center during Sector 3.
   - Score, High Score, Sector progression, and Kill counter.
   - Active weapon status and power-up cooldown display.
+  - Real-time Audio status indicator (`AUDIO: 85%` or `AUDIO: MUTED [Press M]`).
   - Tactical center targeting reticle / crosshair.
   - Interactive Start Menu, Pause screen (`P`), Game Over screen, and Victory screen with restart (`R`).
+
+### 5. Dynamic 3D Positional Audio System
+- **Native High-Performance Audio Engine**: Built on Windows Multimedia API (`winmm` / `waveOut`) with low latency and zero external library overhead.
+- **Polyphonic Multi-Channel Mixing**: Up to 32 simultaneous audio voices mixed in real-time in a dedicated high-priority audio thread.
+- **3D Positional Sound & Stereo Panning**: Laser blasts, enemy fire, and explosions dynamically pan from left to right based on their 3D coordinates relative to the player, with distance attenuation.
+- **Dedicated Sci-Fi Sound FX**:
+  - **Player Blasters**: Rapid twin plasma zap and heavy triple-shot blast.
+  - **Enemy Artillery**: Alien buzz pulses and Dreadnought heavy plasma cannon blasts.
+  - **Explosion Tiers**: Small drone crackles, medium fighter detonations, and thunderous Dreadnought boss explosions.
+  - **Impact Audio**: High-frequency shield deflection shimmer, metallic hull crunch alarms, and bullet impact ticks.
+  - **Chimes & Fanfares**: Ascending power-up chimes (Shield, Repair, Weapon), Level transition fanfares, Dreadnought siren alarms, and Victory / Game Over sequences.
+- **Audio Controls**: Toggle mute with `M`, adjust volume with `+` / `-`, with real-time volume indicator on the HUD.
+- **Procedural Audio Fallback**: Built-in mathematical waveform synthesis guarantees the game will always produce sound effects even if audio files are moved.
 
 ---
 
@@ -76,6 +90,8 @@ In **3D Space Defender**, the player pilots an advanced starfighter through deep
 | **Q** | Reverse Thrust / Brake |
 | **E** | Forward Thrust / Accelerate |
 | **P** | Pause / Unpause Game |
+| **M** | **Toggle Audio Mute / Unmute** |
+| **+ / -** | **Increase / Decrease Audio Volume** |
 | **R** | Restart Mission (on Game Over or Victory) |
 | **ESC** | Exit Game |
 
@@ -87,12 +103,15 @@ In **3D Space Defender**, the player pilots an advanced starfighter through deep
 shooting game/
 ├── main.cpp                  # GLUT window initialization and main callback loops
 ├── Game.h & Game.cpp         # Master game engine, state machine, collisions, HUD
+├── SoundManager.h & .cpp     # Windows waveOut multi-channel 3D audio engine & mixer
 ├── Player.h                  # Player spaceship geometry, flight mechanics, weapons
 ├── Enemy.h                   # Scout, Fighter, and Dreadnought Boss models & AI
 ├── Bullet.h                  # 3D player lasers and enemy plasma projectiles
 ├── Particle.h                # Particle explosion system and shockwaves
 ├── PowerUp.h                 # 3D rotating collectible items
 ├── Camera.h                  # Multi-mode camera with smooth interpolation
+├── assets/sounds/            # 18 high-definition 44.1kHz sci-fi WAV audio effects
+├── generate_sounds.py        # Standalone audio synthesis script
 ├── SpaceDefender3D.cbp       # Code::Blocks Project file
 ├── build.bat                 # One-click Windows batch compiler
 ├── run.bat                   # Game launcher script

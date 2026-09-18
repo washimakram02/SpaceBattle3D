@@ -132,6 +132,8 @@ int main(int argc, char** argv) {
     std::cout << "   [Q, E]       : Reverse / Forward Thrust\n";
     std::cout << "   [C]          : Switch Camera (3rd Person / Cockpit / Free)\n";
     std::cout << "   [P]          : Pause Game\n";
+    std::cout << "   [M]          : Toggle Audio Mute / Unmute\n";
+    std::cout << "   [+, -]       : Increase / Decrease Sound Volume\n";
     std::cout << "   [R]          : Restart Game\n";
     std::cout << "   [ESC]        : Exit Game\n";
     std::cout << "========================================================\n";

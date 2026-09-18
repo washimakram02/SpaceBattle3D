@@ -16,7 +16,9 @@ Game::Game()
       mouseLeftDown(false), mouseRightDown(false),
       aimTargetX(0.0f), aimTargetY(0.0f), aimTargetZ(-70.0f),
       targetLocked(false), lockedTargetName(""),
-      lockedTargetHealth(0), lockedTargetMaxHealth(0) {
+      lockedTargetHealth(0), lockedTargetMaxHealth(0),
+      bossAlertPlayed(false), gameOverSoundPlayed(false),
+      victorySoundPlayed(false), prevEnemyBulletCount(0) {
     
     for (int i = 0; i < 256; ++i) {
         keys[i] = false;
@@ -27,6 +29,7 @@ Game::Game()
 void Game::init(int w, int h) {
     windowWidth = w;
     windowHeight = h;
+    soundManager.init();
     initStars();
     reset();
 }
@@ -58,12 +61,19 @@ void Game::reset() {
     enemySpawnInterval = 1.8f;
     asteroidSpawnTimer = 0.8f;
     levelBannerTimer = 3.0f;
+
+    bossAlertPlayed = false;
+    gameOverSoundPlayed = false;
+    victorySoundPlayed = false;
+    prevEnemyBulletCount = 0;
 }
 
 void Game::startNextLevel() {
     level++;
     killsThisLevel = 0;
     levelBannerTimer = 3.5f;
+
+    soundManager.play(SND_LEVEL_CLEAR, 0.95f);
 
     // Clear remaining minions
     enemies.clear();
@@ -78,6 +88,8 @@ void Game::startNextLevel() {
         enemySpawnInterval = 4.0f; // Occasional escort scouts
         // Spawn the Boss Dreadnought
         enemies.push_back(Enemy(0.0f, 2.0f, -140.0f, ENEMY_BOSS));
+        soundManager.play(SND_BOSS_WARNING, 1.0f);
+        bossAlertPlayed = true;
     }
 }
 
@@ -184,6 +196,7 @@ void Game::handleKeyDown(unsigned char key, int x, int y) {
 
     if (state == STATE_MENU) {
         if (key == 13 || key == 32) { // ENTER or SPACE
+            soundManager.play(SND_UI_CLICK, 0.8f);
             state = STATE_PLAYING;
         }
         return;
@@ -191,6 +204,7 @@ void Game::handleKeyDown(unsigned char key, int x, int y) {
 
     if (state == STATE_GAMEOVER || state == STATE_VICTORY) {
         if (key == 'r' || key == 'R') {
+            soundManager.play(SND_UI_CLICK, 0.8f);
             reset();
             state = STATE_PLAYING;
         }
@@ -198,11 +212,25 @@ void Game::handleKeyDown(unsigned char key, int x, int y) {
     }
 
     if (key == 'p' || key == 'P') {
+        soundManager.play(SND_UI_CLICK, 0.7f);
         if (state == STATE_PLAYING) state = STATE_PAUSED;
         else if (state == STATE_PAUSED) state = STATE_PLAYING;
     }
 
+    if (key == 'm' || key == 'M') {
+        soundManager.toggleMute();
+    }
+
+    if (key == '+' || key == '=') {
+        soundManager.increaseVolume(0.1f);
+    }
+
+    if (key == '-' || key == '_') {
+        soundManager.decreaseVolume(0.1f);
+    }
+
     if (key == 'c' || key == 'C') {
+        soundManager.play(SND_UI_CLICK, 0.5f);
         camera.toggleMode();
     }
 }
@@ -233,8 +261,10 @@ void Game::handleMouseClick(int button, int btnState, int x, int y) {
 
         if (btnState == GLUT_DOWN) {
             if (state == STATE_MENU) {
+                soundManager.play(SND_UI_CLICK, 0.8f);
                 state = STATE_PLAYING;
             } else if (state == STATE_GAMEOVER || state == STATE_VICTORY) {
+                soundManager.play(SND_UI_CLICK, 0.8f);
                 reset();
                 state = STATE_PLAYING;
             }
@@ -242,6 +272,7 @@ void Game::handleMouseClick(int button, int btnState, int x, int y) {
     } else if (button == GLUT_RIGHT_BUTTON) {
         mouseRightDown = (btnState == GLUT_DOWN);
         if (btnState == GLUT_DOWN && state == STATE_PLAYING) {
+            soundManager.play(SND_UI_CLICK, 0.5f);
             camera.toggleMode();
         }
     }
@@ -317,7 +348,13 @@ void Game::update(float dt) {
 
     // Firing (Spacebar OR Left Mouse Click)
     if (keys[32] || mouseLeftDown) {
-        player.fire(playerBullets, aimTargetX, aimTargetY, aimTargetZ);
+        if (player.fire(playerBullets, aimTargetX, aimTargetY, aimTargetZ)) {
+            if (player.weaponType == 1) {
+                soundManager.play(SND_LASER_TRIPLE, 0.9f);
+            } else {
+                soundManager.play(SND_LASER, 0.8f);
+            }
+        }
     }
 
     // Update Camera
@@ -345,12 +382,30 @@ void Game::update(float dt) {
 
     // Update Enemies
     spawnEnemies(dt);
+    size_t prevBullets = enemyBullets.size();
     for (size_t i = 0; i < enemies.size(); ) {
         enemies[i].update(dt, player.x, player.y, player.z, enemyBullets, particles);
         if (!enemies[i].alive) {
             enemies.erase(enemies.begin() + i);
         } else {
             ++i;
+        }
+    }
+    if (enemyBullets.size() > prevBullets) {
+        bool bossFired = false;
+        float fireX = 0.0f, fireZ = 0.0f;
+        for (size_t b = prevBullets; b < enemyBullets.size(); ++b) {
+            if (enemyBullets[b].damage >= 22) {
+                bossFired = true;
+                fireX = enemyBullets[b].x;
+                fireZ = enemyBullets[b].z;
+                break;
+            }
+        }
+        if (bossFired) {
+            soundManager.play3D(SND_BOSS_LASER, fireX, fireZ, player.x, player.z, 0.95f);
+        } else {
+            soundManager.play3D(SND_ENEMY_LASER, enemyBullets[prevBullets].x, enemyBullets[prevBullets].z, player.x, player.z, 0.75f);
         }
     }
 
@@ -388,6 +443,11 @@ void Game::update(float dt) {
 
     // Check player health
     if (player.health <= 0) {
+        if (!gameOverSoundPlayed) {
+            soundManager.play(SND_EXPLOSION_MED, 1.0f);
+            soundManager.play(SND_GAME_OVER, 1.0f);
+            gameOverSoundPlayed = true;
+        }
         particles.addExplosion(player.x, player.y, player.z, 70, 1.0f, 0.4f, 0.1f);
         particles.addShockwave(player.x, player.y, player.z, 14.0f, 1.0f, 0.6f, 0.2f);
         camera.addShake(0.6f, 1.5f);
@@ -418,8 +478,9 @@ void Game::checkCollisions() {
                 bullet.active = false;
                 enemy.takeDamage(bullet.damage);
 
-                // Small impact spark
+                // Small impact spark and 3D hit sound
                 particles.addExplosion(bullet.x, bullet.y, bullet.z, 8, 1.0f, 0.8f, 0.2f);
+                soundManager.play3D(SND_HIT, enemy.x, enemy.z, player.x, player.z, 0.55f);
 
                 if (!enemy.alive) {
                     // Enemy destroyed!
@@ -431,14 +492,21 @@ void Game::checkCollisions() {
                         particles.addExplosion(enemy.x, enemy.y, enemy.z, 120, 1.0f, 0.3f, 0.1f);
                         particles.addShockwave(enemy.x, enemy.y, enemy.z, 22.0f, 1.0f, 0.8f, 0.2f);
                         camera.addShake(0.8f, 2.0f);
+                        soundManager.play(SND_EXPLOSION_BOSS, 1.0f);
+                        if (!victorySoundPlayed) {
+                            soundManager.play(SND_VICTORY, 1.0f);
+                            victorySoundPlayed = true;
+                        }
                         state = STATE_VICTORY;
                     } else if (enemy.type == ENEMY_FIGHTER) {
                         score += 350;
                         particles.addExplosion(enemy.x, enemy.y, enemy.z, 40, 1.0f, 0.5f, 0.1f);
                         camera.addShake(0.25f, 0.5f);
+                        soundManager.play3D(SND_EXPLOSION_MED, enemy.x, enemy.z, player.x, player.z, 0.9f);
                     } else {
                         score += 150;
                         particles.addExplosion(enemy.x, enemy.y, enemy.z, 25, 1.0f, 0.2f, 0.2f);
+                        soundManager.play3D(SND_EXPLOSION_SMALL, enemy.x, enemy.z, player.x, player.z, 0.85f);
                     }
 
                     if (score > highScore) highScore = score;
@@ -471,6 +539,7 @@ void Game::checkCollisions() {
                 bullet.active = false;
                 a.health -= bullet.damage;
                 particles.addExplosion(bullet.x, bullet.y, bullet.z, 6, 0.7f, 0.6f, 0.5f);
+                soundManager.play3D(SND_HIT, a.x, a.z, player.x, player.z, 0.45f);
 
                 if (a.health <= 0) {
                     a.active = false;
@@ -478,6 +547,7 @@ void Game::checkCollisions() {
                     if (score > highScore) highScore = score;
                     particles.addExplosion(a.x, a.y, a.z, 30, 0.65f, 0.6f, 0.55f);
                     particles.addShockwave(a.x, a.y, a.z, a.radius * 2.5f, 0.8f, 0.7f, 0.6f);
+                    soundManager.play3D(SND_EXPLOSION_SMALL, a.x, a.z, player.x, player.z, 0.8f);
 
                     // Chance to drop powerup
                     if (rand() % 100 < 35) {
@@ -502,8 +572,14 @@ void Game::checkCollisions() {
 
         if (distSq <= radSum * radSum) {
             bullet.active = false;
+            bool hadShield = (player.shield > 0.0f);
             player.takeDamage(bullet.damage, particles);
             camera.addShake(0.3f, 0.8f);
+            if (hadShield) {
+                soundManager.play(SND_SHIELD_HIT, 0.85f);
+            } else {
+                soundManager.play(SND_HULL_HIT, 0.95f);
+            }
         }
     }
 
@@ -519,9 +595,16 @@ void Game::checkCollisions() {
 
         if (distSq <= radSum * radSum) {
             a.active = false;
+            bool hadShield = (player.shield > 0.0f);
             player.takeDamage(35, particles);
             particles.addExplosion(a.x, a.y, a.z, 35, 0.8f, 0.4f, 0.2f);
             camera.addShake(0.5f, 1.3f);
+            soundManager.play3D(SND_EXPLOSION_MED, a.x, a.z, player.x, player.z, 0.9f);
+            if (hadShield) {
+                soundManager.play(SND_SHIELD_HIT, 0.8f);
+            } else {
+                soundManager.play(SND_HULL_HIT, 0.95f);
+            }
         }
     }
 
@@ -537,9 +620,16 @@ void Game::checkCollisions() {
 
         if (distSq <= radSum * radSum) {
             enemy.alive = false;
+            bool hadShield = (player.shield > 0.0f);
             player.takeDamage(25, particles);
             particles.addExplosion(enemy.x, enemy.y, enemy.z, 35, 1.0f, 0.4f, 0.1f);
             camera.addShake(0.4f, 1.0f);
+            soundManager.play3D(SND_EXPLOSION_SMALL, enemy.x, enemy.z, player.x, player.z, 0.85f);
+            if (hadShield) {
+                soundManager.play(SND_SHIELD_HIT, 0.8f);
+            } else {
+                soundManager.play(SND_HULL_HIT, 0.95f);
+            }
         }
     }
 
@@ -561,12 +651,15 @@ void Game::checkCollisions() {
             if (pup.type == POWERUP_SHIELD) {
                 player.addShield(45);
                 particles.addShockwave(player.x, player.y, player.z, 5.0f, 0.2f, 0.8f, 1.0f);
+                soundManager.play(SND_POWERUP_SHIELD, 0.9f);
             } else if (pup.type == POWERUP_HEALTH) {
                 player.heal(35);
                 particles.addShockwave(player.x, player.y, player.z, 5.0f, 0.2f, 1.0f, 0.3f);
+                soundManager.play(SND_POWERUP_HEALTH, 0.9f);
             } else if (pup.type == POWERUP_TRIPLE_SHOT) {
                 player.activateTripleShot(14.0f);
                 particles.addShockwave(player.x, player.y, player.z, 6.0f, 1.0f, 0.85f, 0.1f);
+                soundManager.play(SND_POWERUP_WEAPON, 0.9f);
             }
         }
     }
@@ -698,6 +791,16 @@ void Game::renderHUD() {
         } else {
             glColor3f(0.6f, 0.75f, 0.85f);
             renderText(hudX, hudY - 58.0f, "WEAPON: TWIN BLASTER", GLUT_BITMAP_HELVETICA_12);
+        }
+
+        // Audio Status Indicator
+        if (soundManager.isMuted()) {
+            glColor3f(0.95f, 0.35f, 0.35f);
+            renderText(hudX, hudY - 76.0f, "AUDIO: MUTED [Press M]", GLUT_BITMAP_HELVETICA_12);
+        } else {
+            glColor3f(0.45f, 0.9f, 0.55f);
+            snprintf(buf, sizeof(buf), "AUDIO: %d%% [M to mute, +/- vol]", (int)(soundManager.getMasterVolume() * 100.0f));
+            renderText(hudX, hudY - 76.0f, buf, GLUT_BITMAP_HELVETICA_12);
         }
 
         // --- 2. Top-Right: Score, Level, Kills ---
@@ -850,7 +953,7 @@ void Game::renderHUD() {
         glColor4f(0.6f, 0.7f, 0.8f, 0.7f);
         const char* camStr = (camera.mode == CAM_THIRD_PERSON) ? "3RD PERSON" :
                              (camera.mode == CAM_FIRST_PERSON) ? "COCKPIT" : "FREE ORBIT";
-        snprintf(buf, sizeof(buf), "[MOUSE] Aim / Left-Click Fire | [W/S] Up/Down | [A/D] Left/Right | [Q/E] Thrust | [C] Cam (%s) | [P] Pause", camStr);
+        snprintf(buf, sizeof(buf), "[MOUSE] Aim / Fire | [W/S] Pitch | [A/D] Roll | [Q/E] Thrust | [C] Cam (%s) | [P] Pause | [M] %s", camStr, soundManager.isMuted() ? "Unmute" : "Mute");
         renderText(25.0f, 20.0f, buf, GLUT_BITMAP_HELVETICA_12);
 
         // Hit flash screen border
@@ -879,7 +982,7 @@ void Game::renderHUD() {
         glColor3f(1.0f, 0.9f, 0.2f);
         renderText(windowWidth / 2.0f - 75.0f, windowHeight / 2.0f + 20.0f, "GAME PAUSED", GLUT_BITMAP_HELVETICA_18);
         glColor3f(0.8f, 0.8f, 0.85f);
-        renderText(windowWidth / 2.0f - 110.0f, windowHeight / 2.0f - 15.0f, "Press [P] to Resume Playing", GLUT_BITMAP_HELVETICA_12);
+        renderText(windowWidth / 2.0f - 140.0f, windowHeight / 2.0f - 15.0f, "Press [P] to Resume | [M] Toggle Audio", GLUT_BITMAP_HELVETICA_12);
     }
 
     // --- 8. Start Menu Screen ---
@@ -933,7 +1036,7 @@ void Game::renderHUD() {
         renderText(boxX + 35.0f, boxY + 110.0f, "* LEFT CLICK / SPACE : Fire Plasma Blasters", GLUT_BITMAP_HELVETICA_12);
         renderText(boxX + 35.0f, boxY + 85.0f,  "* W / S : Move Up / Down | A / D : Bank Left / Right", GLUT_BITMAP_HELVETICA_12);
         renderText(boxX + 35.0f, boxY + 60.0f,  "* Q / E : Reverse / Forward Thrust", GLUT_BITMAP_HELVETICA_12);
-        renderText(boxX + 35.0f, boxY + 35.0f,  "* C : Switch Camera | P : Pause Game", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 35.0f,  "* C : Camera | P : Pause | M : Mute Sound | +/- : Vol", GLUT_BITMAP_HELVETICA_12);
 
         // Press Enter or Click prompt
         glColor3f(0.2f, 1.0f, 0.4f);

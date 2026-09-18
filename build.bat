@@ -30,7 +30,7 @@ exit /b 1
 
 :COMPILE
 echo [1/2] Compiling C++ source files...
-g++ -std=c++11 -O2 -Wall -I.\include -L.\lib main.cpp Game.cpp -o SpaceDefender3D.exe -lglut32 -lglu32 -lopengl32 -lwinmm
+g++ -std=c++11 -O2 -Wall -I.\include -L.\lib main.cpp Game.cpp SoundManager.cpp -o SpaceDefender3D.exe -lglut32 -lglu32 -lopengl32 -lwinmm
 
 if %errorlevel% equ 0 (
     echo.

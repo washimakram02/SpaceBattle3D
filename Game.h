@@ -19,6 +19,7 @@
 #include "Particle.h"
 #include "PowerUp.h"
 #include "Camera.h"
+#include "SoundManager.h"
 
 enum GameState {
     STATE_MENU,
@@ -55,6 +56,7 @@ public:
     Player player;
     Camera camera;
     ParticleSystem particles;
+    SoundManager soundManager;
 
     std::vector<Enemy> enemies;
     std::vector<Bullet> playerBullets;
@@ -91,6 +93,12 @@ public:
     std::string lockedTargetName;
     int lockedTargetHealth;
     int lockedTargetMaxHealth;
+
+    // Audio event states
+    bool bossAlertPlayed;
+    bool gameOverSoundPlayed;
+    bool victorySoundPlayed;
+    size_t prevEnemyBulletCount;
 
     Game();
 
