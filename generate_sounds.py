@@ -275,6 +275,26 @@ def generate_ui_click():
         samples.append(sample)
     return samples
 
+def generate_missile_launch():
+    # Rocket thruster ignition roar + high-speed whoosh (0.55s)
+    duration = 0.55
+    num_samples = int(duration * SAMPLE_RATE)
+    samples = []
+    phase = 0.0
+    noise_filter = 0.0
+    for i in range(num_samples):
+        t = i / num_samples
+        # Ignition rumble rising into energetic thruster whoosh
+        freq = 130.0 + 520.0 * math.sin(t * math.pi * 0.85)
+        phase += 2.0 * math.pi * freq / SAMPLE_RATE
+        raw_noise = random.random() * 2.0 - 1.0
+        noise_filter += 0.28 * (raw_noise - noise_filter)
+        env = (t / 0.08) if t < 0.08 else ((1.0 - (t - 0.08) / 0.92) ** 1.3)
+        val = math.sin(phase) * 0.45 + noise_filter * 0.8
+        sample = math.tanh(val * 1.7) * env * 0.95
+        samples.append(sample)
+    return samples
+
 def main():
     base_dir = os.path.join(os.path.dirname(__file__), "assets", "sounds")
     os.makedirs(base_dir, exist_ok=True)
@@ -298,6 +318,7 @@ def main():
         "game_over.wav": generate_game_over(),
         "victory.wav": generate_victory(),
         "ui_click.wav": generate_ui_click(),
+        "missile_launch.wav": generate_missile_launch(),
     }
 
     print("Synthesizing audio sound effects...")

@@ -40,6 +40,7 @@ void Game::reset() {
     particles.clear();
     enemies.clear();
     playerBullets.clear();
+    playerMissiles.clear();
     enemyBullets.clear();
     powerups.clear();
     asteroids.clear();
@@ -78,6 +79,8 @@ void Game::startNextLevel() {
     // Clear remaining minions
     enemies.clear();
     enemyBullets.clear();
+    playerMissiles.clear();
+    player.addMissiles(3); // Bonus missiles on wave clear
 
     if (level == 2) {
         killsNeeded = 22;
@@ -233,6 +236,10 @@ void Game::handleKeyDown(unsigned char key, int x, int y) {
         soundManager.play(SND_UI_CLICK, 0.5f);
         camera.toggleMode();
     }
+
+    if (key == 'b' || key == 'B') {
+        firePlayerMissile();
+    }
 }
 
 void Game::handleKeyUp(unsigned char key, int x, int y) {
@@ -272,9 +279,16 @@ void Game::handleMouseClick(int button, int btnState, int x, int y) {
     } else if (button == GLUT_RIGHT_BUTTON) {
         mouseRightDown = (btnState == GLUT_DOWN);
         if (btnState == GLUT_DOWN && state == STATE_PLAYING) {
-            soundManager.play(SND_UI_CLICK, 0.5f);
-            camera.toggleMode();
+            firePlayerMissile();
         }
+    }
+}
+
+void Game::firePlayerMissile() {
+    if (state != STATE_PLAYING) return;
+    if (player.fireMissile(playerMissiles, particles, aimTargetX, aimTargetY, aimTargetZ)) {
+        soundManager.play(SND_MISSILE_LAUNCH, 1.0f);
+        camera.addShake(0.2f, 0.45f);
     }
 }
 
@@ -357,6 +371,11 @@ void Game::update(float dt) {
         }
     }
 
+    // Missile Firing (Right Mouse Button OR 'B' / 'b' key)
+    if (mouseRightDown || keys['b'] || keys['B']) {
+        firePlayerMissile();
+    }
+
     // Update Camera
     camera.update(dt, player.x, player.y, player.z, player.roll, player.pitch);
 
@@ -365,6 +384,38 @@ void Game::update(float dt) {
         playerBullets[i].update(dt);
         if (!playerBullets[i].active) {
             playerBullets.erase(playerBullets.begin() + i);
+        } else {
+            ++i;
+        }
+    }
+
+    // Update Player Missiles
+    for (size_t i = 0; i < playerMissiles.size(); ) {
+        // Dynamic target tracking: find closest alive enemy ahead of missile
+        float closestDistSq = 999999.0f;
+        const Enemy* bestTarget = nullptr;
+        for (const auto& enemy : enemies) {
+            if (!enemy.alive) continue;
+            if (enemy.z < playerMissiles[i].z + 10.0f) {
+                float dx = enemy.x - playerMissiles[i].x;
+                float dy = enemy.y - playerMissiles[i].y;
+                float dz = enemy.z - playerMissiles[i].z;
+                float dSq = dx*dx + dy*dy + dz*dz;
+                if (dSq < closestDistSq) {
+                    closestDistSq = dSq;
+                    bestTarget = &enemy;
+                }
+            }
+        }
+        if (bestTarget != nullptr) {
+            playerMissiles[i].setTarget(bestTarget->x, bestTarget->y, bestTarget->z);
+        } else if (targetLocked) {
+            playerMissiles[i].setTarget(aimTargetX, aimTargetY, aimTargetZ);
+        }
+
+        playerMissiles[i].update(dt, particles);
+        if (!playerMissiles[i].active) {
+            playerMissiles.erase(playerMissiles.begin() + i);
         } else {
             ++i;
         }
@@ -517,6 +568,100 @@ void Game::checkCollisions() {
                         powerups.push_back(PowerUp(enemy.x, enemy.y, enemy.z, pType));
                     }
                 }
+                break;
+            }
+        }
+    }
+
+    // 1b. Player Missiles vs Enemies (Direct Hit + Area-of-Effect Detonation)
+    for (auto& missile : playerMissiles) {
+        if (!missile.active) continue;
+
+        for (auto& enemy : enemies) {
+            if (!enemy.alive) continue;
+
+            float dx = missile.x - enemy.x;
+            float dy = missile.y - enemy.y;
+            float dz = missile.z - enemy.z;
+            float distSq = dx * dx + dy * dy + dz * dz;
+            float radSum = missile.radius + enemy.radius;
+
+            if (distSq <= radSum * radSum) {
+                missile.active = false;
+
+                // Cataclysmic missile blast
+                particles.addExplosion(missile.x, missile.y, missile.z, 75, 1.0f, 0.45f, 0.08f);
+                particles.addShockwave(missile.x, missile.y, missile.z, missile.blastRadius, 1.0f, 0.75f, 0.2f);
+                camera.addShake(0.55f, 1.3f);
+                soundManager.play3D(SND_EXPLOSION_BOSS, missile.x, missile.z, player.x, player.z, 1.0f);
+
+                // AoE Splash Damage to all enemies within missile.blastRadius
+                for (auto& target : enemies) {
+                    if (!target.alive) continue;
+                    float tdx = missile.x - target.x;
+                    float tdy = missile.y - target.y;
+                    float tdz = missile.z - target.z;
+                    float tdist = std::sqrt(tdx * tdx + tdy * tdy + tdz * tdz);
+
+                    if (tdist <= missile.blastRadius) {
+                        float falloff = 1.0f - (tdist / missile.blastRadius) * 0.4f;
+                        int dmg = static_cast<int>(missile.damage * falloff);
+                        target.takeDamage(dmg);
+
+                        if (!target.alive) {
+                            kills++;
+                            killsThisLevel++;
+
+                            if (target.type == ENEMY_BOSS) {
+                                score += 5000;
+                                particles.addExplosion(target.x, target.y, target.z, 120, 1.0f, 0.3f, 0.1f);
+                                particles.addShockwave(target.x, target.y, target.z, 22.0f, 1.0f, 0.8f, 0.2f);
+                                camera.addShake(0.8f, 2.0f);
+                                soundManager.play(SND_EXPLOSION_BOSS, 1.0f);
+                                if (!victorySoundPlayed) {
+                                    soundManager.play(SND_VICTORY, 1.0f);
+                                    victorySoundPlayed = true;
+                                }
+                                state = STATE_VICTORY;
+                            } else if (target.type == ENEMY_FIGHTER) {
+                                score += 350;
+                                particles.addExplosion(target.x, target.y, target.z, 40, 1.0f, 0.5f, 0.1f);
+                                soundManager.play3D(SND_EXPLOSION_MED, target.x, target.z, player.x, player.z, 0.9f);
+                            } else {
+                                score += 150;
+                                particles.addExplosion(target.x, target.y, target.z, 25, 1.0f, 0.2f, 0.2f);
+                                soundManager.play3D(SND_EXPLOSION_SMALL, target.x, target.z, player.x, player.z, 0.85f);
+                            }
+
+                            if (score > highScore) highScore = score;
+
+                            if (rand() % 100 < 32 && target.type != ENEMY_BOSS) {
+                                int pType = rand() % 3;
+                                powerups.push_back(PowerUp(target.x, target.y, target.z, pType));
+                            }
+                        }
+                    }
+                }
+
+                // Splash damage to nearby asteroids
+                for (auto& a : asteroids) {
+                    if (!a.active) continue;
+                    float adx = missile.x - a.x;
+                    float ady = missile.y - a.y;
+                    float adz = missile.z - a.z;
+                    float adist = std::sqrt(adx * adx + ady * ady + adz * adz);
+                    if (adist <= missile.blastRadius) {
+                        a.health -= static_cast<int>(missile.damage * 0.75f);
+                        if (a.health <= 0) {
+                            a.active = false;
+                            score += 80;
+                            if (score > highScore) highScore = score;
+                            particles.addExplosion(a.x, a.y, a.z, 30, 0.65f, 0.6f, 0.55f);
+                            particles.addShockwave(a.x, a.y, a.z, a.radius * 2.5f, 0.8f, 0.7f, 0.6f);
+                        }
+                    }
+                }
+
                 break;
             }
         }
@@ -786,21 +931,36 @@ void Game::renderHUD() {
         // Weapon / Powerup Status
         if (player.tripleShotTimer > 0.0f) {
             glColor3f(1.0f, 0.85f, 0.1f);
-            snprintf(buf, sizeof(buf), "TRIPLE SHOT ACTIVE [%.1fs]", player.tripleShotTimer);
+            snprintf(buf, sizeof(buf), "BLASTERS: TRIPLE SHOT [%.1fs]", player.tripleShotTimer);
             renderText(hudX, hudY - 58.0f, buf, GLUT_BITMAP_HELVETICA_12);
         } else {
             glColor3f(0.6f, 0.75f, 0.85f);
-            renderText(hudX, hudY - 58.0f, "WEAPON: TWIN BLASTER", GLUT_BITMAP_HELVETICA_12);
+            renderText(hudX, hudY - 58.0f, "BLASTERS: TWIN PLASMA", GLUT_BITMAP_HELVETICA_12);
         }
+
+        // Heavy Guided Missiles Status
+        if (player.missiles > 0) {
+            if (player.canFireMissile()) {
+                glColor3f(1.0f, 0.35f, 0.2f);
+                snprintf(buf, sizeof(buf), "MISSILES: %d / %d [READY - MOUSE R / B]", player.missiles, player.maxMissiles);
+            } else {
+                glColor3f(1.0f, 0.75f, 0.3f);
+                snprintf(buf, sizeof(buf), "MISSILES: %d / %d [COOLDOWN]", player.missiles, player.maxMissiles);
+            }
+        } else {
+            glColor3f(0.85f, 0.45f, 0.45f);
+            snprintf(buf, sizeof(buf), "MISSILES: 0 / %d [RELOAD %.1fs]", player.maxMissiles, player.missileReloadInterval - player.missileReloadTimer);
+        }
+        renderText(hudX, hudY - 76.0f, buf, GLUT_BITMAP_HELVETICA_12);
 
         // Audio Status Indicator
         if (soundManager.isMuted()) {
             glColor3f(0.95f, 0.35f, 0.35f);
-            renderText(hudX, hudY - 76.0f, "AUDIO: MUTED [Press M]", GLUT_BITMAP_HELVETICA_12);
+            renderText(hudX, hudY - 94.0f, "AUDIO: MUTED [Press M]", GLUT_BITMAP_HELVETICA_12);
         } else {
             glColor3f(0.45f, 0.9f, 0.55f);
             snprintf(buf, sizeof(buf), "AUDIO: %d%% [M to mute, +/- vol]", (int)(soundManager.getMasterVolume() * 100.0f));
-            renderText(hudX, hudY - 76.0f, buf, GLUT_BITMAP_HELVETICA_12);
+            renderText(hudX, hudY - 94.0f, buf, GLUT_BITMAP_HELVETICA_12);
         }
 
         // --- 2. Top-Right: Score, Level, Kills ---
@@ -953,7 +1113,7 @@ void Game::renderHUD() {
         glColor4f(0.6f, 0.7f, 0.8f, 0.7f);
         const char* camStr = (camera.mode == CAM_THIRD_PERSON) ? "3RD PERSON" :
                              (camera.mode == CAM_FIRST_PERSON) ? "COCKPIT" : "FREE ORBIT";
-        snprintf(buf, sizeof(buf), "[MOUSE] Aim / Fire | [W/S] Pitch | [A/D] Roll | [Q/E] Thrust | [C] Cam (%s) | [P] Pause | [M] %s", camStr, soundManager.isMuted() ? "Unmute" : "Mute");
+        snprintf(buf, sizeof(buf), "[MOUSE L/SPACE] Fire | [MOUSE R/B] Missile | [W/S] Pitch | [A/D] Roll | [Q/E] Thrust | [C] Cam (%s) | [P] Pause | [M] %s", camStr, soundManager.isMuted() ? "Unmute" : "Mute");
         renderText(25.0f, 20.0f, buf, GLUT_BITMAP_HELVETICA_12);
 
         // Hit flash screen border
@@ -1032,11 +1192,12 @@ void Game::renderHUD() {
         renderText(boxX + 180.0f, boxY + 165.0f, "MISSION BRIEFING", GLUT_BITMAP_HELVETICA_12);
 
         glColor3f(0.9f, 0.9f, 0.95f);
-        renderText(boxX + 35.0f, boxY + 135.0f, "* MOUSE : Aim Target Crosshair", GLUT_BITMAP_HELVETICA_12);
-        renderText(boxX + 35.0f, boxY + 110.0f, "* LEFT CLICK / SPACE : Fire Plasma Blasters", GLUT_BITMAP_HELVETICA_12);
-        renderText(boxX + 35.0f, boxY + 85.0f,  "* W / S : Move Up / Down | A / D : Bank Left / Right", GLUT_BITMAP_HELVETICA_12);
-        renderText(boxX + 35.0f, boxY + 60.0f,  "* Q / E : Reverse / Forward Thrust", GLUT_BITMAP_HELVETICA_12);
-        renderText(boxX + 35.0f, boxY + 35.0f,  "* C : Camera | P : Pause | M : Mute Sound | +/- : Vol", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 138.0f, "* MOUSE AIM : Aim Target Crosshair", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 116.0f, "* LEFT CLICK / SPACE : Fire Twin / Triple Blasters", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 94.0f,  "* RIGHT CLICK / B : Launch Heavy Homing Missiles", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 72.0f,  "* W / S : Pitch Up / Down | A / D : Bank Left / Right", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 50.0f,  "* Q / E : Reverse / Forward Thrust", GLUT_BITMAP_HELVETICA_12);
+        renderText(boxX + 35.0f, boxY + 28.0f,  "* C : Camera | P : Pause | M : Mute | +/- : Volume", GLUT_BITMAP_HELVETICA_12);
 
         // Press Enter or Click prompt
         glColor3f(0.2f, 1.0f, 0.4f);
@@ -1138,6 +1299,9 @@ void Game::render() {
     // 5. Render Projectiles
     for (const auto& b : playerBullets) {
         b.draw();
+    }
+    for (const auto& m : playerMissiles) {
+        m.draw();
     }
     for (const auto& b : enemyBullets) {
         b.draw();

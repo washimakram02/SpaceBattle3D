@@ -16,6 +16,7 @@
 #include "Player.h"
 #include "Enemy.h"
 #include "Bullet.h"
+#include "Missile.h"
 #include "Particle.h"
 #include "PowerUp.h"
 #include "Camera.h"
@@ -60,6 +61,7 @@ public:
 
     std::vector<Enemy> enemies;
     std::vector<Bullet> playerBullets;
+    std::vector<Missile> playerMissiles;
     std::vector<Bullet> enemyBullets;
     std::vector<PowerUp> powerups;
     std::vector<Asteroid> asteroids;
@@ -115,6 +117,7 @@ public:
 
     void update(float dt);
     void render();
+    void firePlayerMissile();
 
 private:
     void initStars();

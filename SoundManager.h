@@ -31,6 +31,7 @@ enum SoundID {
     SND_GAME_OVER,
     SND_VICTORY,
     SND_UI_CLICK,
+    SND_MISSILE_LAUNCH,
     SND_COUNT
 };
 

@@ -493,6 +493,26 @@ void SoundManager::synthesizeFallback(SoundID id) {
             }
             break;
         }
+        case SND_MISSILE_LAUNCH: {
+            // Rocket thruster ignition and whoosh (0.42s)
+            int n = static_cast<int>(0.42 * SAMPLE_RATE);
+            s.resize(n);
+            double phase = 0.0, noiseFilter = 0.0;
+            for (int i = 0; i < n; ++i) {
+                double t = (double)i / n;
+                // Frequency sweep: deep ignition rumble rising then whooshing away
+                double freq = 140.0 + 420.0 * sin(t * PI * 0.85);
+                phase += 2.0 * PI * freq / SAMPLE_RATE;
+                // Noise element for rocket combustion thrust
+                double rawNoise = ((double)rand() / RAND_MAX) * 2.0 - 1.0;
+                noiseFilter += 0.28 * (rawNoise - noiseFilter);
+                // Envelope: quick attack, sustained burn, smooth decay
+                double env = (t < 0.1) ? (t / 0.1) : pow(1.0 - (t - 0.1) / 0.9, 1.4);
+                double val = sin(phase) * 0.45 + noiseFilter * 0.75;
+                s[i] = static_cast<short>(tanh(val * 1.6) * env * 27000.0);
+            }
+            break;
+        }
         default: {
             // Simple generic tone fallback
             int n = static_cast<int>(0.15 * SAMPLE_RATE);
@@ -532,7 +552,8 @@ void SoundManager::loadAllSounds() {
         { SND_BOSS_WARNING,    "assets/sounds/boss_warning.wav" },
         { SND_GAME_OVER,       "assets/sounds/game_over.wav" },
         { SND_VICTORY,         "assets/sounds/victory.wav" },
-        { SND_UI_CLICK,        "assets/sounds/ui_click.wav" }
+        { SND_UI_CLICK,        "assets/sounds/ui_click.wav" },
+        { SND_MISSILE_LAUNCH,  "assets/sounds/missile_launch.wav" }
     };
 
     for (const auto& item : soundFiles) {

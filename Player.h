@@ -13,6 +13,7 @@
 #include <cmath>
 #include "Bullet.h"
 #include "Particle.h"
+#include "Missile.h"
 
 class Player {
 public:
@@ -33,6 +34,15 @@ public:
     float tripleShotTimer;
     float fireCooldown;
     float fireRate;
+
+    // Heavy Guided Missiles
+    int missiles;
+    int maxMissiles;
+    float missileCooldown;
+    float missileFireRate;
+    float missileReloadTimer;
+    float missileReloadInterval;
+    int missileWingSide; // 0 = Left Wing, 1 = Right Wing
 
     float radius;
     float enginePulse;
@@ -59,6 +69,14 @@ public:
         tripleShotTimer = 0.0f;
         fireCooldown = 0.0f;
         fireRate = 0.16f;
+
+        maxMissiles = 6;
+        missiles = maxMissiles;
+        missileCooldown = 0.0f;
+        missileFireRate = 0.65f;
+        missileReloadTimer = 0.0f;
+        missileReloadInterval = 5.0f;
+        missileWingSide = 0;
 
         radius = 2.2f;
         enginePulse = 0.0f;
@@ -116,6 +134,22 @@ public:
         // Fire cooldown
         if (fireCooldown > 0.0f) {
             fireCooldown -= dt;
+        }
+
+        // Missile cooldown
+        if (missileCooldown > 0.0f) {
+            missileCooldown -= dt;
+        }
+
+        // Passive missile replenishment over time (1 every 5s if below max)
+        if (missiles < maxMissiles) {
+            missileReloadTimer += dt;
+            if (missileReloadTimer >= missileReloadInterval) {
+                missiles++;
+                missileReloadTimer = 0.0f;
+            }
+        } else {
+            missileReloadTimer = 0.0f;
         }
 
         // Weapon timer
@@ -193,6 +227,40 @@ public:
             bullets.push_back(Bullet(leftX - 0.3f, leftY, leftZ, ldx - 2.0f, ldy, ldz, false, 25, 1.0f, 0.85f, 0.1f));
             bullets.push_back(Bullet(rightX + 0.3f, rightY, rightZ, rdx + 2.0f, rdy, rdz, false, 25, 1.0f, 0.85f, 0.1f));
         }
+        return true;
+    }
+
+    bool canFireMissile() const {
+        return missileCooldown <= 0.0f && missiles > 0;
+    }
+
+    void addMissiles(int amt) {
+        missiles += amt;
+        if (missiles > maxMissiles) missiles = maxMissiles;
+    }
+
+    bool fireMissile(std::vector<Missile>& missilesList, ParticleSystem& particles,
+                    float targetX = 0.0f, float targetY = 0.0f, float targetZ = -100.0f) {
+        if (!canFireMissile()) return false;
+
+        missileCooldown = missileFireRate;
+        missiles--;
+
+        // Alternate wing hardpoint: Left (-1.8f) or Right (+1.8f)
+        float wingOffsetX = (missileWingSide == 0) ? -1.8f : 1.8f;
+        missileWingSide = 1 - missileWingSide;
+
+        float launchX = x + wingOffsetX;
+        float launchY = y - 0.25f;
+        float launchZ = z + 0.2f;
+
+        // Spawn homing missile
+        missilesList.push_back(Missile(launchX, launchY, launchZ, targetX, targetY, targetZ));
+
+        // Initial launch ignition explosion flash & trail puff
+        particles.addExplosion(launchX, launchY, launchZ + 0.6f, 10, 1.0f, 0.6f, 0.1f);
+        particles.addTrail(launchX, launchY, launchZ, 1.0f, 0.85f, 0.2f, 0.6f);
+
         return true;
     }
 
@@ -306,6 +374,44 @@ public:
         glScalef(0.12f, 0.12f, 1.6f);
         glutSolidCube(1.0f);
         glPopMatrix();
+
+        // 4b. Wing Hardpoint Mounted Missiles
+        if (missiles > 0) {
+            GLfloat mPodDiffuse[] = { 0.20f, 0.22f, 0.25f, 1.0f };
+            GLfloat mNoseDiffuse[]= { 0.95f, 0.20f, 0.15f, 1.0f };
+
+            // Left wing missile
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, mPodDiffuse);
+            glPushMatrix();
+            glTranslatef(-1.8f, -0.22f, 0.3f);
+            glScalef(0.18f, 0.18f, 1.1f);
+            glutSolidCube(1.0f);
+            glPopMatrix();
+
+            glMaterialfv(GL_FRONT, GL_DIFFUSE, mNoseDiffuse);
+            glPushMatrix();
+            glTranslatef(-1.8f, -0.22f, -0.3f);
+            glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
+            glutSolidCone(0.18f, 0.45f, 10, 8);
+            glPopMatrix();
+
+            // Right wing missile
+            if (missiles >= 2) {
+                glMaterialfv(GL_FRONT, GL_DIFFUSE, mPodDiffuse);
+                glPushMatrix();
+                glTranslatef(1.8f, -0.22f, 0.3f);
+                glScalef(0.18f, 0.18f, 1.1f);
+                glutSolidCube(1.0f);
+                glPopMatrix();
+
+                glMaterialfv(GL_FRONT, GL_DIFFUSE, mNoseDiffuse);
+                glPushMatrix();
+                glTranslatef(1.8f, -0.22f, -0.3f);
+                glRotatef(180.0f, 0.0f, 1.0f, 0.0f);
+                glutSolidCone(0.18f, 0.45f, 10, 8);
+                glPopMatrix();
+            }
+        }
 
         // 5. Vertical Stabilizer Fins
         glMaterialfv(GL_FRONT, GL_DIFFUSE, trimDiffuse);

@@ -63,6 +63,7 @@
 		<Unit filename="Enemy.h" />
 		<Unit filename="Game.cpp" />
 		<Unit filename="Game.h" />
+		<Unit filename="Missile.h" />
 		<Unit filename="Particle.h" />
 		<Unit filename="Player.h" />
 		<Unit filename="PowerUp.h" />

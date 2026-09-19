@@ -33,9 +33,16 @@ In **3D Space Defender**, the player pilots an advanced starfighter through deep
   - Expanding energy shockwave rings upon ship destruction.
   - Rear engine trail plumes emitted during flight.
 
-### 2. Gameplay Mechanics
+### 2. Weapons & Combat Mechanics
+- **Twin / Triple Plasma Blasters**: Rapid-fire kinetic energy cannons with pinpoint mouse crosshair convergence.
+- **Heavy Guided Homing Missiles**:
+  - Devastating secondary ordnance launched from wing pylons via **Right Mouse Click** or the **B key**.
+  - Intelligent active target homing that dynamically seeks and acquires hostile fightercraft and mothership components.
+  - High-velocity rocket propulsion with fiery particle exhaust plumes, billowing smoke trails, and aerodynamic spin.
+  - Cataclysmic 220-damage Area-of-Effect (AoE) blast detonation with radial splash damage destroying surrounding fighters and shattering asteroids.
+  - Real-time missile ammo, cooldown meter, and tactical passive reload HUD indicators.
 - **3D Flight Controls**: Full 6-degree responsiveness with dynamic banking roll and pitch tilt during turns.
-- **Combat & Collision Detection**: Accurate 3D spherical bounding collision checks between player, enemy ships, lasers, asteroids, and collectibles.
+- **Combat & Collision Detection**: Accurate 3D spherical bounding collision checks between player, missiles, enemy ships, lasers, asteroids, and collectibles.
 - **Energy Shield & Hull System**: Dynamic shield barrier that absorbs damage before hull degradation, featuring automatic shield regeneration after avoiding damage.
 - **Collectible Power-Ups**:
   - **Shield Booster** (Cyan Orb): Restores +45 energy shield.
@@ -54,18 +61,20 @@ In **3D Space Defender**, the player pilots an advanced starfighter through deep
 ### 4. 2D HUD & Overlay Systems
 - Orthographic 2D interface (`gluOrtho2D`):
   - Hull integrity & Energy shield meters with dynamic color bars.
+  - Missile count, Ready/Cooldown status, and passive reload countdown meter.
   - Dreadnought Boss Health Bar on top center during Sector 3.
   - Score, High Score, Sector progression, and Kill counter.
   - Active weapon status and power-up cooldown display.
   - Real-time Audio status indicator (`AUDIO: 85%` or `AUDIO: MUTED [Press M]`).
-  - Tactical center targeting reticle / crosshair.
+  - Tactical center targeting reticle / crosshair with enemy target lock-on.
   - Interactive Start Menu, Pause screen (`P`), Game Over screen, and Victory screen with restart (`R`).
 
 ### 5. Dynamic 3D Positional Audio System
 - **Native High-Performance Audio Engine**: Built on Windows Multimedia API (`winmm` / `waveOut`) with low latency and zero external library overhead.
 - **Polyphonic Multi-Channel Mixing**: Up to 32 simultaneous audio voices mixed in real-time in a dedicated high-priority audio thread.
-- **3D Positional Sound & Stereo Panning**: Laser blasts, enemy fire, and explosions dynamically pan from left to right based on their 3D coordinates relative to the player, with distance attenuation.
+- **3D Positional Sound & Stereo Panning**: Laser blasts, missile launches, enemy fire, and explosions dynamically pan from left to right based on their 3D coordinates relative to the player, with distance attenuation.
 - **Dedicated Sci-Fi Sound FX**:
+  - **Heavy Guided Missile**: Rocket thruster ignition roar, high-speed whoosh acceleration, and colossal detonation blasts.
   - **Player Blasters**: Rapid twin plasma zap and heavy triple-shot blast.
   - **Enemy Artillery**: Alien buzz pulses and Dreadnought heavy plasma cannon blasts.
   - **Explosion Tiers**: Small drone crackles, medium fighter detonations, and thunderous Dreadnought boss explosions.
@@ -82,7 +91,8 @@ In **3D Space Defender**, the player pilots an advanced starfighter through deep
 |---|---|
 | **MOUSE** | **Aim Target Reticle / Crosshair** in 3D space |
 | **LEFT CLICK** / **SPACEBAR** | Fire Plasma Blasters towards Crosshair |
-| **RIGHT CLICK** / **C** | Toggle Camera Mode (3rd Person / Cockpit / Free) |
+| **RIGHT CLICK** / **B** | **Launch Heavy Guided Homing Missile** |
+| **C** | Toggle Camera Mode (3rd Person / Cockpit / Free) |
 | **W** / **Up Arrow** | Move Up / Climb Altitude |
 | **S** / **Down Arrow** | Move Down / Descend Altitude |
 | **A** / **Left Arrow** | Bank & Strafe Left |
@@ -105,12 +115,13 @@ shooting game/
 ├── Game.h & Game.cpp         # Master game engine, state machine, collisions, HUD
 ├── SoundManager.h & .cpp     # Windows waveOut multi-channel 3D audio engine & mixer
 ├── Player.h                  # Player spaceship geometry, flight mechanics, weapons
+├── Missile.h                 # 3D heavy guided missile, physics, guidance, trails
 ├── Enemy.h                   # Scout, Fighter, and Dreadnought Boss models & AI
 ├── Bullet.h                  # 3D player lasers and enemy plasma projectiles
 ├── Particle.h                # Particle explosion system and shockwaves
 ├── PowerUp.h                 # 3D rotating collectible items
 ├── Camera.h                  # Multi-mode camera with smooth interpolation
-├── assets/sounds/            # 18 high-definition 44.1kHz sci-fi WAV audio effects
+├── assets/sounds/            # 19 high-definition 44.1kHz sci-fi WAV audio effects
 ├── generate_sounds.py        # Standalone audio synthesis script
 ├── SpaceDefender3D.cbp       # Code::Blocks Project file
 ├── build.bat                 # One-click Windows batch compiler
@@ -136,7 +147,7 @@ shooting game/
 ### Method 3: Command Line (MinGW / GCC)
 Open PowerShell or Command Prompt in the project folder and run:
 ```bash
-g++ -std=c++11 -O2 -Wall -I.\include -L.\lib main.cpp Game.cpp -o SpaceDefender3D.exe -lglut32 -lglu32 -lopengl32 -lwinmm
+g++ -std=c++11 -O2 -Wall -I.\include -L.\lib main.cpp Game.cpp SoundManager.cpp -o SpaceDefender3D.exe -lglut32 -lglu32 -lopengl32 -lwinmm
 .\SpaceDefender3D.exe
 ```
 
